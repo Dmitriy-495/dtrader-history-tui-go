@@ -1,0 +1,13 @@
+# Секреты — никогда не коммитить
+.env
+
+# Логи
+*.log
+tui_client.log
+
+# Собранный бинарник
+/tui-client
+/dtrader-history-tui
+
+# Go
+/vendor/

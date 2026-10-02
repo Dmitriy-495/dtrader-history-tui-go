@@ -245,7 +245,6 @@ func (m Model) rightbarWidth() int {
 // header (3 строки: верх рамки, контент, низ рамки) и footer (те же
 // 3 строки) — тот же принцип, что и в dtrader-tui-6/app.go.
 func (m Model) bodyHeight() int {
-	const headerHeight = 3
 	const footerHeight = 3
 	h := m.height - headerHeight - footerHeight
 	if h < 1 {
@@ -285,10 +284,13 @@ func (m *Model) resizeTable() {
 // любой ширине терминала, а не только на той, что была в исходном
 // фиксированном расчёте.
 func (m Model) tableColumns() []table.Column {
-	// 3 колонки-разделителя между 4 колонками съедают дополнительное
-	// место сверх суммы Width — оставляем небольшой запас, чтобы не
-	// упереться в перенос строки на границе.
-	const columnBorderOverhead = 6
+	// Каждая колонка bubbles/table добавляет к своей Width по 1 символу
+	// паддинга слева и справа (4 колонки = 8 символов), плюс рамка
+	// contentStyle забирает ещё 2 символа от contentWidth. Раньше здесь
+	// было 6: таблица получалась на 4 символа шире рамки, и rightbar
+	// выезжал за правый край терминала (только при включённых цветах —
+	// без них lipgloss обрезал лишнее, поэтому тесты этого не видели).
+	const columnBorderOverhead = 10
 	available := m.contentWidth() - columnBorderOverhead
 	if available < 20 {
 		available = 20 // минимум, при котором таблица ещё читаема; на совсем узких терминалах будет обрезаться самим bubbles/table, не паниковать

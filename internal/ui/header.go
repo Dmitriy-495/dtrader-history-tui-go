@@ -15,10 +15,18 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/Dmitriy-495/dtui-kit/banner"
 	"github.com/Dmitriy-495/dtui-kit/theme"
 )
 
 var headerBrandStyle = lipgloss.NewStyle().Foreground(theme.ColorBorder).Bold(true)
+
+// headerLogo — FIGlet-логотип (шрифт small, 4 строки). ...
+var headerLogo = strings.Trim(banner.Render("dtrader", banner.Options{Font: "banner3"}), "\n")
+
+// headerHeight — полная высота шапки: строки логотипа + верх и низ
+// рамки. Единый источник для renderHeader и Model.bodyHeight.
+var headerHeight = lipgloss.Height(headerLogo) + 2
 
 // renderHeader строит содержимое шапки. totalSnapshots — сумма
 // snapshots_since_start по всем символам (см. buildTotalSnapshots),
@@ -27,31 +35,42 @@ var headerBrandStyle = lipgloss.NewStyle().Foreground(theme.ColorBorder).Bold(tr
 // отдельных символов (см. rightbar.go), потому что 0 здесь означает
 // "сборщик только что запущен", не "данные отсутствуют".
 //
-// width — полная ширина терминала. См. подробный комментарий в
-// оригинале (dtrader-tui-6/header.go) про арифметику .Width()/.Padding()
-// и зачем нужен headerSafetyMargin — тот же паттерн применён здесь
-// без изменений.
+// width — полная ширина терминала. Арифметика ширины (рамка, паддинг)
+// — тот же паттерн, что в dtrader-tui-6/header.go, см. комментарии
+// внутри. Подпись "history" скрывается, если не хватает места.
 func renderHeader(totalSnapshots int64, width int) string {
-	left := headerBrandStyle.Render("⚡ dtrader-history") + "  " + theme.MutedStyle.Render("сборщик order book")
+	logo := headerBrandStyle.Render(headerLogo)
 	center := theme.DataStyle.Render(time.Now().UTC().Format("15:04:05")) + theme.MutedStyle.Render(" UTC")
 	right := theme.MutedStyle.Render("снапшотов всего: ") + theme.DataStyle.Bold(true).Render(fmt.Sprintf("%d", totalSnapshots))
 
 	textWidth := width - 2 // см. header.go оригинала — рамка добавляет ровно 2 символа
 
-	leftWidth := lipgloss.Width(left)
-	rightWidth := lipgloss.Width(right)
-	centerWidth := lipgloss.Width(center)
+	// Width() в lipgloss включает Padding(0, 2) ниже, поэтому реально
+	// доступно на 4 символа меньше, чем textWidth. (В оригинале эта же
+	// константа называлась headerSafetyMargin и объяснялась шириной
+	// эмодзи — на деле она компенсировала именно паддинг.)
+	const headerHorizontalPadding = 4
 
-	const headerSafetyMargin = 4 // запас на случай расхождения lipgloss.Width() с реальной шириной эмодзи в терминале (см. оригинал)
-
-	totalPad := textWidth - headerSafetyMargin - leftWidth - rightWidth - centerWidth
+	// Подпись рядом с логотипом показываем, только если после неё
+	// остаётся хотя бы по одному пробелу между тремя блоками; на узком
+	// терминале она первой уступает место остальному.
+	left := logo
+	tagline := lipgloss.JoinHorizontal(lipgloss.Center, logo, "  ", theme.MutedStyle.Render("history"))
+	free := func(l string) int {
+		return textWidth - headerHorizontalPadding - lipgloss.Width(l) - lipgloss.Width(center) - lipgloss.Width(right)
+	}
+	if free(tagline) >= 2 {
+		left = tagline
+	}
+	totalPad := free(left)
 	if totalPad < 0 {
 		totalPad = 0
 	}
 	leftGap := totalPad / 2
 	rightGap := totalPad - leftGap
 
-	line := left + strings.Repeat(" ", leftGap) + center + strings.Repeat(" ", rightGap) + right
+	line := lipgloss.JoinHorizontal(lipgloss.Center,
+		left, strings.Repeat(" ", leftGap), center, strings.Repeat(" ", rightGap), right)
 
 	content := lipgloss.NewStyle().Padding(0, 2).Width(textWidth).Render(line)
 	return theme.BorderStyle.Render(content)

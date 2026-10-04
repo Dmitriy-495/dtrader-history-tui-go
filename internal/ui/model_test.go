@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Dmitriy-495/dtrader-history-tui/internal/statusclient"
 )
@@ -159,7 +159,7 @@ func TestTotalSnapshots_SumsAcrossSymbols(t *testing.T) {
 // BINDINGS = [("q", "quit", ...)] в app.py.
 func TestUpdate_QuitsOnQKey(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd == nil {
 		t.Fatal("ожидалась команда (tea.Quit) при нажатии q")
 	}
@@ -263,7 +263,7 @@ func (e *testError) Error() string { return e.msg }
 // не паникует до первого tea.WindowSizeMsg (width == 0).
 func TestView_RendersWithoutPanicBeforeWindowSize(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
-	out := m.View()
+	out := m.render()
 	if out == "" {
 		t.Error("View() до WindowSizeMsg не должен возвращать пустую строку")
 	}
@@ -275,7 +275,7 @@ func TestView_RendersWithoutPanicBeforeWindowSize(t *testing.T) {
 func TestView_RendersWithoutPanicBeforeFirstStatus(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	out := updated.(Model).View()
+	out := updated.(Model).render()
 	if !strings.Contains(out, "Подключение") {
 		t.Errorf("View() до первого статуса должен содержать 'Подключение...', получено: %q", out)
 	}
@@ -286,7 +286,7 @@ func TestView_RendersErrorState(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
 	m, _ = update(m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	updated, _ := m.Update(clientErrMsg{err: errTest})
-	out := updated.(Model).View()
+	out := updated.(Model).render()
 	if !strings.Contains(out, "тестовая ошибка") {
 		t.Errorf("View() при ошибке должен содержать текст ошибки, получено: %q", out)
 	}
@@ -299,7 +299,7 @@ func TestView_RendersSysErrorInRightbar(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
 	m, _ = update(m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	updated, _ := m.Update(sysErrMsg{err: errTest})
-	out := updated.(Model).View()
+	out := updated.(Model).render()
 	if !strings.Contains(out, "sysagent недоступен") {
 		t.Errorf("View() при ошибке sysagent должен содержать 'sysagent недоступен', получено: %q", out)
 	}
@@ -352,7 +352,7 @@ func TestContentRightbarWidth_SplitsEvenly(t *testing.T) {
 // contentStyle.Height(N) считал N готовой высотой без поправки на эту
 // скрытую дополнительную строку — тогда как у rightbar (без такого
 // скрытого заголовка) расчёт совпадал точно. Итоговая высота всего
-// View() (после исправления, см. resizeTable — tableHeaderRows) должна
+// View() (см. resizeTable) должна
 // точно совпадать с заданной высотой терминала, а каждая строка -
 // иметь одинаковую видимую ширину (без ANSI-кодов) по всему полотну,
 // иначе рамки двух колонок неизбежно разъезжаются по вертикали.
@@ -361,7 +361,7 @@ func TestView_ContentAndRightbarBordersAlignVertically(t *testing.T) {
 	const width, height = 140, 35
 	m, _ = update(m, tea.WindowSizeMsg{Width: width, Height: height})
 
-	out := m.View()
+	out := m.render()
 	lines := strings.Split(out, "\n")
 
 	if len(lines) != height {

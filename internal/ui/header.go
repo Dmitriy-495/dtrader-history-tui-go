@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Dmitriy-495/dtui-kit/banner"
 	"github.com/Dmitriy-495/dtui-kit/theme"
@@ -21,7 +21,10 @@ import (
 
 var headerBrandStyle = lipgloss.NewStyle().Foreground(theme.ColorBorder).Bold(true)
 
-// headerLogo — FIGlet-логотип (шрифт small, 4 строки). ...
+// headerLogo — FIGlet-логотип (шрифт banner3, 7 строк). Строится один
+// раз при старте: текст и шрифт статичны. banner.Render у mini
+// добавляет пустую первую строку — обрезаем её здесь, чтобы не
+// тратить лишнюю строку терминала.
 var headerLogo = strings.Trim(banner.Render("dtrader", banner.Options{Font: "banner3"}), "\n")
 
 // headerHeight — полная высота шапки: строки логотипа + верх и низ

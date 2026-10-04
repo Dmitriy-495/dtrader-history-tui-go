@@ -9,7 +9,7 @@
 package ui
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Dmitriy-495/dtui-kit/theme"
 )

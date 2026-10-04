@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/table"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Dmitriy-495/dtui-kit/sparkbar"
 	"github.com/Dmitriy-495/dtui-kit/theme"
@@ -182,7 +182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeTable()
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.client.Stop()
@@ -242,8 +242,8 @@ func (m Model) rightbarWidth() int {
 }
 
 // bodyHeight — высота средней части (content+rightbar) за вычетом
-// header (3 строки: верх рамки, контент, низ рамки) и footer (те же
-// 3 строки) — тот же принцип, что и в dtrader-tui-6/app.go.
+// header (headerHeight, см. header.go: строки логотипа + рамка) и
+// footer (3 строки: верх рамки, контент, низ рамки) — тот же принцип, что и в dtrader-tui-6/app.go.
 func (m Model) bodyHeight() int {
 	const footerHeight = 3
 	h := m.height - headerHeight - footerHeight
@@ -255,18 +255,14 @@ func (m Model) bodyHeight() int {
 
 func (m *Model) resizeTable() {
 	m.table.SetColumns(m.tableColumns())
-	// bubbles/table.View() включает не только N строк данных, но и
-	// собственную строку заголовка колонок — если задать SetHeight
-	// равным высоте, которую потом ожидает contentStyle.Height() для
-	// всего блока целиком, реальный рендер таблицы окажется на 1
-	// строку длиннее, чем рамка вокруг неё это учитывает: rightbar
-	// (без такого скрытого заголовка) укладывается в заданную высоту
-	// ровно, а content — нет, из-за чего рамки двух колонок съезжают
-	// друг относительно друга по вертикали (найдено визуальной
-	// проверкой реального рендера, не гипотетически). -1 здесь —
-	// компенсация именно этой одной строки заголовка таблицы.
-	const tableHeaderRows = 1
-	m.table.SetHeight(m.bodyHeight() - 2 - tableHeaderRows)
+	// В bubbles v2 table.SetHeight учитывает строку заголовка колонок
+	// сам (в v1 нужна была ручная компенсация -1), а рамку contentStyle
+	// (она входит в Height, см. render) мы вычитаем здесь: 2 строки.
+	// В bubbles v2 у таблицы есть собственный viewport, и при нулевой
+	// ширине (значение по умолчанию) строки данных не рисуются — виден
+	// только заголовок. Ширина внутри рамки contentStyle: contentWidth - 2.
+	m.table.SetWidth(m.contentWidth() - 2)
+	m.table.SetHeight(m.bodyHeight() - 2)
 }
 
 // tableColumns пересчитывает ширину колонок таблицы пропорционально
@@ -416,7 +412,15 @@ func (m Model) footerStatusLine() string {
 // View рендерит: header, тело (content+rightbar через
 // JoinHorizontal), footer — тот же паттерн сборки, что и в
 // dtrader-tui-6/app.go (View(), JoinVertical(header, body, footer)).
-func (m Model) View() string {
+// View — обёртка для bubbletea v2: контент строит render(), а
+// альтернативный экран включается полем View (раньше — tea.WithAltScreen()).
+func (m Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) render() string {
 	if m.width == 0 {
 		// Первый кадр до получения tea.WindowSizeMsg — bubbletea
 		// гарантированно пришлёт его почти сразу, но до этого момента
@@ -429,8 +433,8 @@ func (m Model) View() string {
 	contentStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColorBorder).
-		Width(m.contentWidth() - 2).
-		Height(m.bodyHeight() - 2)
+		Width(m.contentWidth()).
+		Height(m.bodyHeight())
 	content := contentStyle.Render(m.table.View())
 
 	rightbar := renderRightbar(m.cpuHist, m.memHist, m.diskHist, m.lastSysErr, m.rightbarWidth(), m.bodyHeight())

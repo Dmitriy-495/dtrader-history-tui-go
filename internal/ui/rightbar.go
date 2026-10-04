@@ -10,7 +10,7 @@ package ui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Dmitriy-495/dtui-kit/sparkbar"
 	"github.com/Dmitriy-495/dtui-kit/theme"
@@ -68,8 +68,8 @@ func renderRightbar(cpuHist, memHist, diskHist sparkbar.History, sysErr error, w
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColorBorder).
-		Width(innerWidth).
-		Height(height-2).
+		Width(width).
+		Height(height).
 		Padding(1, 1).
 		Render(body)
 }

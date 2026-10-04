@@ -22,7 +22,7 @@ import (
 
 	"github.com/joho/godotenv"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/Dmitriy-495/dtrader-history-tui/internal/ui"
 )
@@ -79,7 +79,7 @@ func run() error {
 	}
 
 	model := ui.New(*host, *port, token, []string(symbols), *sysPort)
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := tea.NewProgram(model)
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("ошибка выполнения TUI: %w", err)
 	}

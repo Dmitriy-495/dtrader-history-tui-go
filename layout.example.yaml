@@ -1,0 +1,23 @@
+# Раскладка шапки по умолчанию (вшита в бинарник). Чтобы изменить вид без
+# пересборки, положите рядом свой layout.yaml (флаг -layout): он целиком
+# заменяет этот файл. Опечатка в ключе, типе, шрифте, цвете-размере или
+# выравнивании — ошибка при старте.
+#
+# Элементы: banner (FIGlet-текст), clock (часы из FIGlet-цифр), text
+# (подпись + значение из bind). Колонка (column) — вертикальный стек.
+# font-size: sm=small, md=standard, lg=banner3. Цвета: brand, ok, data,
+# muted, warn, sos или код цвета. show-from / show-until — пороги ширины
+# терминала.
+layout:
+  - zone: header
+    row:
+      - { type: banner, text: dtrader, font-size: lg, font-color: brand, bold: true }
+      - { type: banner, text: history, font-size: md, font-color: brand, bold: true, valign: top, show-from: 174 }
+      - align: right
+        show-from: 125
+        column:
+          - { type: clock, bind: time_utc, font-size: sm, font-color: ok, bold: true, align: right }
+          - { type: text, label: "UTC · снапшотов всего: ", bind: snapshots_total, font-color: data, bold: true, margin-top: 1, align: right }
+      # Узкий терминал (< 125 колонок): прежняя однострочная раскладка.
+      - { type: text, bind: time_utc, suffix: " UTC", font-color: data, align: center, show-until: 124 }
+      - { type: text, label: "снапшотов всего: ", bind: snapshots_total, font-color: data, bold: true, align: right, show-until: 124 }

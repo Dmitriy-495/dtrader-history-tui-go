@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -33,10 +34,17 @@ func TestView_BodyLinesMatchTerminalWidth(t *testing.T) {
 			}
 		}
 		const footerHeight = 3
-		for i := headerHeight; i < len(lines)-footerHeight; i++ {
+		for i := headerHeightAt(w); i < len(lines)-footerHeight; i++ {
 			if got := lipgloss.Width(strings.TrimRight(lines[i], " ")); got != w {
 				t.Fatalf("width=%d: строка тела %d без добивки пробелами шириной %d, want %d", w, i, got, w)
 			}
 		}
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

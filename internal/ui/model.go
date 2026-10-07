@@ -242,11 +242,11 @@ func (m Model) rightbarWidth() int {
 }
 
 // bodyHeight — высота средней части (content+rightbar) за вычетом
-// header (headerHeight, см. header.go: строки логотипа + рамка) и
+// header (headerHeightAt, см. header.go: по факту отрисовки) и
 // footer (3 строки: верх рамки, контент, низ рамки) — тот же принцип, что и в dtrader-tui-6/app.go.
 func (m Model) bodyHeight() int {
 	const footerHeight = 3
-	h := m.height - headerHeight - footerHeight
+	h := m.height - headerHeightAt(m.width) - footerHeight
 	if h < 1 {
 		h = 1
 	}

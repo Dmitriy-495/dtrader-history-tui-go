@@ -1,80 +1,79 @@
-// Этот файл реализует верхнюю панель TUI: заголовок слева, время
-// биржи по UTC по центру, общее количество снапшотов справа —
-// раскладка и арифметика ширины взяты из dtrader-tui-6/internal/tui/
-// header.go (раздел 11 CHECKPOINT.md dtrader-6, единая дизайн-система
-// проектов dtrader), не изобретены заново — та версия уже прошла
-// через несколько раундов правок на реальных багах (перенос строки
-// из-за неверного расчёта ширины, смещение рамки), которые нет смысла
-// наступать повторно здесь.
+// Этот файл реализует верхнюю панель TUI: заголовок слева (FIGlet-лого
+// и подпись), справа крупные часы UTC со счётчиком снапшотов под ними;
+// на узком терминале — прежняя однострочная раскладка. Внешний вид
+// описан в default_layout.yaml (или во внешнем layout.yaml) и
+// отрисовывается движком internal/dtui с компонентами dtui-kit —
+// раскладка шапки в этом файле больше не зашита в Go.
 package ui
 
 import (
+	_ "embed"
 	"fmt"
-	"strings"
+	"os"
 	"time"
 
-	"charm.land/lipgloss/v2"
-
-	"github.com/Dmitriy-495/dtui-kit/banner"
-	"github.com/Dmitriy-495/dtui-kit/theme"
+	"github.com/Dmitriy-495/dtrader-history-tui/internal/dtui"
 )
 
-var headerBrandStyle = lipgloss.NewStyle().Foreground(theme.ColorBorder).Bold(true)
+//go:embed default_layout.yaml
+var defaultLayoutYAML []byte
 
-// headerLogo — FIGlet-логотип (шрифт banner3, 7 строк). Строится один
-// раз при старте: текст и шрифт статичны. banner.Render у mini
-// добавляет пустую первую строку — обрезаем её здесь, чтобы не
-// тратить лишнюю строку терминала.
-var headerLogo = strings.Trim(banner.Render("dtrader", banner.Options{Font: "banner3"}), "\n")
+// layout — действующая раскладка: встроенная, пока не вызван LoadLayout.
+var layout = mustParseLayout(defaultLayoutYAML)
 
-// headerHeight — полная высота шапки: строки логотипа + верх и низ
-// рамки. Единый источник для renderHeader и Model.bodyHeight.
-var headerHeight = lipgloss.Height(headerLogo) + 2
+func mustParseLayout(raw []byte) *dtui.Layout {
+	l, err := dtui.Parse(raw)
+	if err != nil {
+		panic("встроенная раскладка default_layout.yaml некорректна: " + err.Error())
+	}
+	if _, ok := l.Zone("header"); !ok {
+		panic("во встроенной раскладке нет зоны header")
+	}
+	return l
+}
 
-// renderHeader строит содержимое шапки. totalSnapshots — сумма
-// snapshots_since_start по всем символам (см. buildTotalSnapshots),
-// 0 до первого полученного статуса — это легитимное значение, не
-// требует отдельного состояния "нет данных" в отличие от статуса
-// отдельных символов (см. rightbar.go), потому что 0 здесь означает
-// "сборщик только что запущен", не "данные отсутствуют".
-//
-// width — полная ширина терминала. Арифметика ширины (рамка, паддинг)
-// — тот же паттерн, что в dtrader-tui-6/header.go, см. комментарии
-// внутри. Подпись "history" скрывается, если не хватает места.
+// LoadLayout заменяет встроенную раскладку содержимым файла path. Ошибка
+// разбора (неизвестный ключ, тип, шрифт и т.п.) возвращается как есть.
+func LoadLayout(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	l, err := dtui.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if _, ok := l.Zone("header"); !ok {
+		return fmt.Errorf("%s: нет зоны header", path)
+	}
+	layout = l
+	return nil
+}
+
+func headerZone() *dtui.Zone {
+	z, _ := layout.Zone("header")
+	return z
+}
+
+// headerData — значения, на которые ссылаются элементы шапки (bind).
+func headerData(totalSnapshots int64) dtui.Data {
+	return dtui.Data{
+		"time_utc":        time.Now().UTC().Format("15:04:05"),
+		"snapshots_total": fmt.Sprintf("%d", totalSnapshots),
+	}
+}
+
+// renderHeader строит шапку на ширину width. totalSnapshots — сумма
+// snapshots_since_start по всем символам (см. buildTotalSnapshots), 0 до
+// первого полученного статуса — легитимное значение ("сборщик только что
+// запущен"), а не отсутствие данных.
 func renderHeader(totalSnapshots int64, width int) string {
-	logo := headerBrandStyle.Render(headerLogo)
-	center := theme.DataStyle.Render(time.Now().UTC().Format("15:04:05")) + theme.MutedStyle.Render(" UTC")
-	right := theme.MutedStyle.Render("снапшотов всего: ") + theme.DataStyle.Bold(true).Render(fmt.Sprintf("%d", totalSnapshots))
+	return headerZone().Render(width, headerData(totalSnapshots))
+}
 
-	textWidth := width - 2 // см. header.go оригинала — рамка добавляет ровно 2 символа
-
-	// Width() в lipgloss включает Padding(0, 2) ниже, поэтому реально
-	// доступно на 4 символа меньше, чем textWidth. (В оригинале эта же
-	// константа называлась headerSafetyMargin и объяснялась шириной
-	// эмодзи — на деле она компенсировала именно паддинг.)
-	const headerHorizontalPadding = 4
-
-	// Подпись рядом с логотипом показываем, только если после неё
-	// остаётся хотя бы по одному пробелу между тремя блоками; на узком
-	// терминале она первой уступает место остальному.
-	left := logo
-	tagline := lipgloss.JoinHorizontal(lipgloss.Center, logo, "  ", theme.MutedStyle.Render("history"))
-	free := func(l string) int {
-		return textWidth - headerHorizontalPadding - lipgloss.Width(l) - lipgloss.Width(center) - lipgloss.Width(right)
-	}
-	if free(tagline) >= 2 {
-		left = tagline
-	}
-	totalPad := free(left)
-	if totalPad < 0 {
-		totalPad = 0
-	}
-	leftGap := totalPad / 2
-	rightGap := totalPad - leftGap
-
-	line := lipgloss.JoinHorizontal(lipgloss.Center,
-		left, strings.Repeat(" ", leftGap), center, strings.Repeat(" ", rightGap), right)
-
-	content := lipgloss.NewStyle().Padding(0, 2).Width(textWidth).Render(line)
-	return theme.BorderStyle.Render(content)
+// headerHeightAt — высота шапки (с рамкой) при данной ширине терминала.
+// Зависит от ширины, потому что часть элементов скрывается на узком
+// терминале, поэтому считается по факту отрисовки.
+func headerHeightAt(width int) int {
+	return headerZone().Height(width, headerData(0))
 }

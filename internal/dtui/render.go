@@ -4,10 +4,12 @@ import (
 	"image/color"
 	"strings"
 	"sync"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/Dmitriy-495/dtui-kit/banner"
+	"github.com/Dmitriy-495/dtui-kit/digits"
 	"github.com/Dmitriy-495/dtui-kit/theme"
 )
 
@@ -20,18 +22,35 @@ const (
 // Render отрисовывает зону в рамке theme.BorderStyle на ширину width.
 func (z *Zone) Render(width int, data Data) string {
 	avail := width - zoneInsets
-	left, center, right := z.clusters(width, data)
+	line := spreadBlocks(avail, z.blocks(width, data)...)
 
+	content := lipgloss.NewStyle().Padding(0, 2).Width(width - 2).Render(line)
+	return theme.BorderStyle.Render(content)
+}
+
+// blocks собирает видимые на ширине width кластеры (слева, по центру,
+// справа) в готовые блоки; пустые кластеры пропускаются.
+func (z *Zone) blocks(width int, data Data) []string {
+	left, center, right := z.clusters(width, data)
 	blocks := make([]string, 0, 3)
 	for _, c := range [][]placed{left, center, right} {
 		if len(c) > 0 {
 			blocks = append(blocks, joinCluster(c))
 		}
 	}
-	line := spreadBlocks(avail, blocks...)
+	return blocks
+}
 
-	content := lipgloss.NewStyle().Padding(0, 2).Width(width - 2).Render(line)
-	return theme.BorderStyle.Render(content)
+// Fit сообщает, сколько места нужно содержимому зоны в одну строку (need),
+// сколько его есть внутри рамки и отступов (avail) и сколько промежутков
+// между кластерами (gaps). Если need > avail, строка не помещается и
+// переносится, ломая рамку; запас avail-need делится между промежутками.
+func (z *Zone) Fit(width int, data Data) (need, avail, gaps int) {
+	blocks := z.blocks(width, data)
+	for _, b := range blocks {
+		need += lipgloss.Width(b)
+	}
+	return need, width - zoneInsets, max(len(blocks)-1, 0)
 }
 
 // Height — высота зоны (с рамкой) при данной ширине и данных.
@@ -145,7 +164,7 @@ func renderNode(n Node, width int, data Data) string {
 	case "banner":
 		out = rect(styled(n, n.FontColor).Render(renderBanner(n.Text, fontOf(n, banner.FontStandard))))
 	case "clock":
-		out = rect(styled(n, n.FontColor).Render(renderClock(data[n.Bind], fontOf(n, banner.FontSmall))))
+		out = rect(styled(n, n.FontColor).Render(clockText(n, data)))
 	case "text":
 		out = renderText(n, data)
 	}
@@ -245,6 +264,26 @@ func renderBanner(text string, f banner.Font) string {
 // склейка не искажали форму FIGlet-фигур.
 func rect(block string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, block)
+}
+
+// clockText выбирает вид часов: семисегментные digits (font: digits) или
+// FIGlet-цифры из банера.
+func clockText(n Node, data Data) string {
+	if n.Font == fontDigits {
+		return renderDigitsClock(data[n.Bind])
+	}
+	return renderClock(data[n.Bind], fontOf(n, banner.FontSmall))
+}
+
+// renderDigitsClock рисует «ЧЧ:ММ» из времени в формате RFC3339. Двоеточие
+// мигает по самому времени, поэтому приложению нужен тик не реже 500 мс.
+// Нет значения или оно не разобрано — прочерки той же ширины.
+func renderDigitsClock(v string) string {
+	t, err := time.Parse(time.RFC3339Nano, v)
+	if err != nil {
+		return digits.Render("--:--")
+	}
+	return digits.Clock(t)
 }
 
 // Часы: каждый знак рисуется в ячейке фиксированной ширины, иначе блок

@@ -1,26 +1,34 @@
-// Footer — нижняя панель: пока статусная строка (состояние
-// подключения + подсказка по выходу), в будущем возможна командная
-// строка по аналогии с vim (Shift+:) — не реализовано сейчас, только
-// заложено местом в архитектуре (см. Model.Update, case tea.KeyMsg:
-// свободна для добавления обработки ":" без переписывания остального).
+// Footer — нижняя панель: статусная строка (состояние подключения) и
+// подсказка по выходу (suffix в раскладке). Внешний вид описан зоной footer в
+// default_layout.yaml (или во внешнем layout.yaml) и отрисовывается тем же
+// движком, что и шапка. Цвет статуса зависит от состояния и выбирается в
+// Go (см. Model.footerStatus): приложение отдаёт движку уже окрашенную
+// строку status.
 //
-// Стиль и арифметика ширины — тот же паттерн, что и в header.go,
-// портированный из dtrader-tui-6/internal/tui/footer.go.
+// В будущем возможна командная строка по аналогии с vim (Shift+:) — не
+// реализовано, только заложено местом (см. Model.Update, case
+// tea.KeyPressMsg).
 package ui
 
-import (
-	"charm.land/lipgloss/v2"
+import "github.com/Dmitriy-495/dtrader-history-tui/internal/dtui"
 
-	"github.com/Dmitriy-495/dtui-kit/theme"
-)
+func footerZone() *dtui.Zone { return zoneOf("footer") }
 
-// renderFooter рисует нижнюю панель на всю ширину терминала.
-// statusLine — текст текущего статуса подключения (см. Model.footerStatusLine).
-func renderFooter(statusLine string, width int) string {
-	textWidth := width - 2
-	content := lipgloss.NewStyle().Padding(0, 2).Width(textWidth).Render(statusLine)
-	return theme.BorderStyle.Render(content)
+// footerData — значения, на которые ссылаются элементы подвала (bind).
+// status — уже окрашенный текст состояния подключения. Подсказка по
+// выходу ("q — выход") задана в раскладке (suffix), а не в Go.
+func footerData(status string) dtui.Data {
+	return dtui.Data{"status": status}
 }
 
-// footerHints — подсказка по выходу, добавляется к статусной строке.
-const footerHints = "q — выход"
+// renderFooter рисует нижнюю панель на всю ширину терминала.
+func renderFooter(status string, width int) string {
+	return footerZone().Render(width, footerData(status))
+}
+
+// footerHeightAt — высота подвала (с рамкой) при данной ширине и статусе:
+// по факту отрисовки, потому что раскладка подвала внешняя и может быть
+// выше одной строки, а длинный статус переносится.
+func footerHeightAt(status string, width int) int {
+	return footerZone().Height(width, footerData(status))
+}

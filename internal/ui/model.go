@@ -242,11 +242,11 @@ func (m Model) rightbarWidth() int {
 }
 
 // bodyHeight — высота средней части (content+rightbar) за вычетом
-// header (headerHeightAt, см. header.go: по факту отрисовки) и
-// footer (3 строки: верх рамки, контент, низ рамки) — тот же принцип, что и в dtrader-tui-6/app.go.
+// header (headerHeightAt, см. header.go) и footer (footerHeightAt, см.
+// footer.go): обе высоты считаются по факту отрисовки — тот же принцип,
+// что и в dtrader-tui-6/app.go.
 func (m Model) bodyHeight() int {
-	const footerHeight = 3
-	h := m.height - headerHeightAt(m.width) - footerHeight
+	h := m.height - headerHeightAt(m.width) - footerHeightAt(m.footerStatus(), m.width)
 	if h < 1 {
 		h = 1
 	}
@@ -390,12 +390,13 @@ func (m Model) totalSnapshots() int64 {
 	return total
 }
 
-// footerStatusLine строит текст статусной строки footer — состояние
-// подключения к статус-серверу сборщика (основной источник, критичный
-// для работы TUI) плюс подсказка по выходу. Состояние sysagent сюда
-// намеренно не выводится — оно уже видно прямо в rightbar (см.
-// renderRightbar), дублировать в footer было бы избыточно.
-func (m Model) footerStatusLine() string {
+// footerStatus строит окрашенный текст состояния подключения к
+// статус-серверу сборщика (основной источник, критичный для работы TUI)
+// для значения status в зоне footer (подсказка по выходу — отдельный
+// элемент раскладки). Состояние sysagent сюда намеренно не выводится — оно
+// уже видно прямо в rightbar (см. renderRightbar), дублировать в footer
+// было бы избыточно.
+func (m Model) footerStatus() string {
 	var status string
 	switch {
 	case m.lastErr != nil:
@@ -406,7 +407,7 @@ func (m Model) footerStatusLine() string {
 		uptime := int(m.lastStatus.UptimeSeconds + time.Since(m.lastStatusAt).Seconds())
 		status = theme.OKStyle.Render(fmt.Sprintf("подключено · аптайм сборщика %dс", uptime))
 	}
-	return status + "   " + theme.MutedStyle.Render(footerHints)
+	return status
 }
 
 // View рендерит: header, тело (content+rightbar через
@@ -441,7 +442,7 @@ func (m Model) render() string {
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, content, rightbar)
 
-	footer := renderFooter(m.footerStatusLine(), m.width)
+	footer := renderFooter(m.footerStatus(), m.width)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 }

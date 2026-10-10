@@ -24,7 +24,7 @@ type Node struct {
 	Bind       string `yaml:"bind"`        // clock, text: имя значения из Data
 	Label      string `yaml:"label"`       // text: подпись перед значением
 	Suffix     string `yaml:"suffix"`      // text: подпись после значения
-	Font       string `yaml:"font"`        // явный FIGlet-шрифт (приоритетнее font-size)
+	Font       string `yaml:"font"`        // явный FIGlet-шрифт (приоритетнее font-size); у clock ещё "digits" (семисегментные цифры кита)
 	FontSize   string `yaml:"font-size"`   // sm | md | lg
 	FontColor  string `yaml:"font-color"`  // brand|ok|data|muted|warn|sos или код цвета
 	LabelColor string `yaml:"label-color"` // цвет подписей text (по умолчанию muted)
@@ -50,6 +50,11 @@ type Layout struct {
 
 // Data — значения, которые приложение отдаёт элементам по именам (bind).
 type Data map[string]string
+
+// fontDigits — особое значение font у clock: вместо FIGlet-шрифта рисуются
+// семисегментные цифры dtui-kit/digits («ЧЧ:ММ», двоеточие мигает).
+// Значение bind у такого clock — время в формате RFC3339 (time.RFC3339Nano).
+const fontDigits = "digits"
 
 // Шкала font-size → шрифт. Ступеней три: плавного масштаба в консоли нет.
 var sizeFonts = map[string]banner.Font{
@@ -122,8 +127,13 @@ func validate(n Node, inColumn bool) error {
 			return fmt.Errorf("неизвестный font-size %q (sm, md, lg)", n.FontSize)
 		}
 	}
-	if n.Font != "" && !banner.IsKnownFont(banner.Font(n.Font)) {
-		return fmt.Errorf("неизвестный font %q (проверенные: %v)", n.Font, banner.Fonts())
+	switch {
+	case n.Font == fontDigits:
+		if n.Type != "clock" {
+			return fmt.Errorf("font %q возможен только у clock", fontDigits)
+		}
+	case n.Font != "" && !banner.IsKnownFont(banner.Font(n.Font)):
+		return fmt.Errorf("неизвестный font %q (проверенные: %v, у clock ещё %q)", n.Font, banner.Fonts(), fontDigits)
 	}
 	switch n.Align {
 	case "", "left", "center", "right":

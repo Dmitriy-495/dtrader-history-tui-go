@@ -77,3 +77,59 @@ func TestLoadLayout_OverridesAndRejectsTypos(t *testing.T) {
 		t.Error("внешняя раскладка должна заменить встроенную")
 	}
 }
+
+// Внешний файл, описывающий только шапку, не ломает подвал: недостающие
+// зоны берутся из встроенной раскладки.
+func TestLoadLayout_MissingZoneFallsBackToDefault(t *testing.T) {
+	saved := layout
+	defer func() { layout = saved }()
+
+	p := t.TempDir() + "/header_only.yaml"
+	writeFile(t, p, "layout:\n  - zone: header\n    row:\n      - { type: text, label: \"HELLO \", bind: snapshots_total }\n")
+	if err := LoadLayout(p); err != nil {
+		t.Fatal(err)
+	}
+	f := plain(renderFooter("статус", 80))
+	if !strings.Contains(f, "статус") || !strings.Contains(f, "q — выход") {
+		t.Errorf("подвал должен остаться встроенным:\n%s", f)
+	}
+}
+
+// Опечатка в имени зоны, повтор зоны и пустой файл — ошибки, а не
+// молчаливый возврат к встроенной раскладке.
+func TestLoadLayout_RejectsBadZones(t *testing.T) {
+	saved := layout
+	defer func() { layout = saved }()
+
+	row := "    row:\n      - { type: text, bind: snapshots_total }\n"
+	cases := map[string]string{
+		"опечатка в имени зоны": "layout:\n  - zone: hedaer\n" + row,
+		"зона дважды":           "layout:\n  - zone: header\n" + row + "  - zone: header\n" + row,
+		"нет зон":               "layout: []\n",
+	}
+	dir := t.TempDir()
+	for name, raw := range cases {
+		p := dir + "/x.yaml"
+		writeFile(t, p, raw)
+		if err := LoadLayout(p); err == nil {
+			t.Errorf("%s: ожидалась ошибка", name)
+		}
+	}
+}
+
+// Подвал: статус и подсказка в одной строке через три пробела, рамка на
+// всю ширину; высота подвала считается по факту отрисовки.
+func TestRenderFooter_StatusAndHint(t *testing.T) {
+	for _, w := range []int{40, 80, 200} {
+		f := renderFooter("подключено", w)
+		if got := lipgloss.Width(f); got != w {
+			t.Fatalf("width=%d: ширина подвала %d", w, got)
+		}
+		if got := footerHeightAt("подключено", w); got != 3 {
+			t.Fatalf("width=%d: высота подвала %d, want 3", w, got)
+		}
+		if !strings.Contains(plain(f), "подключено   q — выход") {
+			t.Errorf("width=%d: ожидались статус и подсказка через 3 пробела:\n%s", w, plain(f))
+		}
+	}
+}

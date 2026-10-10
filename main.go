@@ -53,14 +53,40 @@ func run() error {
 	host := flag.String("host", "", "IP или домен VPS, где крутится collector")
 	port := flag.Int("port", 8765, "порт status-сервера сборщика")
 	sysPort := flag.Int("sys-port", 8766, "порт sysagent (метрики CPU/RAM/Disk VPS)")
+	checkLayout := flag.Bool("check-layout", false, "проверить раскладку (встроенную или из -layout) на диапазоне ширин и выйти, без запуска интерфейса")
+	layoutPath := flag.String("layout", "", "путь к layout.yaml: зоны, описанные в нём, заменяют встроенные (header, footer); без пересборки")
 	flag.Var(&symbols, "symbol", "символ для отображения (можно указать несколько раз, должны совпадать с symbols в config.yaml сборщика)")
 	flag.Parse()
+
+	// Режим проверки раскладки: ни хост, ни символы, ни токен не нужны.
+	if *checkLayout {
+		source := "встроенная"
+		if *layoutPath != "" {
+			if err := ui.LoadLayout(*layoutPath); err != nil {
+				return err
+			}
+			source = *layoutPath
+		}
+		if !ui.CheckLayout(os.Stdout, source) {
+			return fmt.Errorf("раскладка не прошла проверку")
+		}
+		return nil
+	}
 
 	if *host == "" {
 		return fmt.Errorf("флаг -host обязателен")
 	}
 	if len(symbols) == 0 {
 		return fmt.Errorf("нужен хотя бы один -symbol")
+	}
+
+	// Внешняя раскладка проверяется до запуска интерфейса: опечатка в
+	// ключе, типе, шрифте и т.п. — понятная ошибка в консоль, а не
+	// испорченный экран.
+	if *layoutPath != "" {
+		if err := ui.LoadLayout(*layoutPath); err != nil {
+			return err
+		}
 	}
 
 	// Логи — в файл, не в stdout: bubbletea занимает терминал через

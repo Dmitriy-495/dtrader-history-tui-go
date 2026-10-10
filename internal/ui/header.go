@@ -1,64 +1,26 @@
 // Этот файл реализует верхнюю панель TUI: заголовок слева (FIGlet-лого
-// и подпись), справа крупные часы UTC со счётчиком снапшотов под ними;
-// на узком терминале — прежняя однострочная раскладка. Внешний вид
-// описан в default_layout.yaml (или во внешнем layout.yaml) и
-// отрисовывается движком internal/dtui с компонентами dtui-kit —
-// раскладка шапки в этом файле больше не зашита в Go.
+// и подпись), справа крупные семисегментные часы UTC (ЧЧ:ММ) со счётчиком
+// снапшотов под ними; на узком терминале — прежняя однострочная
+// раскладка. Внешний вид описан зоной header в default_layout.yaml (или
+// во внешнем layout.yaml, см. layout.go) и отрисовывается движком
+// internal/dtui с компонентами dtui-kit — раскладка шапки в Go не зашита.
 package ui
 
 import (
-	_ "embed"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/Dmitriy-495/dtrader-history-tui/internal/dtui"
 )
 
-//go:embed default_layout.yaml
-var defaultLayoutYAML []byte
-
-// layout — действующая раскладка: встроенная, пока не вызван LoadLayout.
-var layout = mustParseLayout(defaultLayoutYAML)
-
-func mustParseLayout(raw []byte) *dtui.Layout {
-	l, err := dtui.Parse(raw)
-	if err != nil {
-		panic("встроенная раскладка default_layout.yaml некорректна: " + err.Error())
-	}
-	if _, ok := l.Zone("header"); !ok {
-		panic("во встроенной раскладке нет зоны header")
-	}
-	return l
-}
-
-// LoadLayout заменяет встроенную раскладку содержимым файла path. Ошибка
-// разбора (неизвестный ключ, тип, шрифт и т.п.) возвращается как есть.
-func LoadLayout(path string) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	l, err := dtui.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	if _, ok := l.Zone("header"); !ok {
-		return fmt.Errorf("%s: нет зоны header", path)
-	}
-	layout = l
-	return nil
-}
-
-func headerZone() *dtui.Zone {
-	z, _ := layout.Zone("header")
-	return z
-}
+func headerZone() *dtui.Zone { return zoneOf("header") }
 
 // headerData — значения, на которые ссылаются элементы шапки (bind).
 func headerData(totalSnapshots int64) dtui.Data {
+	now := time.Now().UTC()
 	return dtui.Data{
-		"time_utc":        time.Now().UTC().Format("15:04:05"),
+		"time_utc":        now.Format("15:04:05"),
+		"now_utc":         now.Format(time.RFC3339Nano), // для clock с font: digits
 		"snapshots_total": fmt.Sprintf("%d", totalSnapshots),
 	}
 }

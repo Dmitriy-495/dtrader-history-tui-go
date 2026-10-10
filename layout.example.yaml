@@ -1,9 +1,11 @@
-# Раскладка шапки по умолчанию (вшита в бинарник). Чтобы изменить вид без
-# пересборки, положите рядом свой layout.yaml (флаг -layout): он целиком
-# заменяет этот файл. Опечатка в ключе, типе, шрифте, цвете-размере или
+# Раскладка по умолчанию, зоны header и footer (вшита в бинарник). Чтобы
+# изменить вид без пересборки, положите рядом свой layout.yaml (флаг
+# -layout): зоны, описанные в нём, заменяют эти, остальные остаются
+# встроенными. Опечатка в ключе, типе, шрифте, цвете-размере или
 # выравнивании — ошибка при старте.
 #
-# Элементы: banner (FIGlet-текст), clock (часы из FIGlet-цифр), text
+# Элементы: banner (FIGlet-текст), clock (часы: font: digits — семисегментные
+# ЧЧ:ММ с мигающим двоеточием, иначе FIGlet-цифры по font-size), text
 # (подпись + значение из bind). Колонка (column) — вертикальный стек.
 # font-size: sm=small, md=standard, lg=banner3. Цвета: brand, ok, data,
 # muted, warn, sos или код цвета. show-from / show-until — пороги ширины
@@ -16,8 +18,15 @@ layout:
       - align: right
         show-from: 125
         column:
-          - { type: clock, bind: time_utc, font-size: sm, font-color: ok, bold: true, align: right }
+          - { type: clock, bind: now_utc, font: digits, font-color: ok, bold: true, align: right }
           - { type: text, label: "UTC · снапшотов всего: ", bind: snapshots_total, font-color: data, bold: true, margin-top: 1, align: right }
       # Узкий терминал (< 125 колонок): прежняя однострочная раскладка.
       - { type: text, bind: time_utc, suffix: " UTC", font-color: data, align: center, show-until: 124 }
       - { type: text, label: "снапшотов всего: ", bind: snapshots_total, font-color: data, bold: true, align: right, show-until: 124 }
+
+  # Подвал: статус подключения и подсказка. Цвет статуса зависит от
+  # состояния и задаётся приложением (bind: status приходит уже окрашенным),
+  # подсказка — suffix того же элемента (цвет label-color, по умолчанию muted).
+  - zone: footer
+    row:
+      - { type: text, bind: status, suffix: "   q — выход" }

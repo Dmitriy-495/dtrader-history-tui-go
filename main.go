@@ -25,6 +25,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Dmitriy-495/dtrader-history-tui/internal/ui"
+	"github.com/Dmitriy-495/dtui-kit/banner"
 )
 
 // stringSlice реализует flag.Value для повторяемого флага -symbol
@@ -54,6 +55,7 @@ func run() error {
 	port := flag.Int("port", 8765, "порт status-сервера сборщика")
 	sysPort := flag.Int("sys-port", 8766, "порт sysagent (метрики CPU/RAM/Disk VPS)")
 	checkLayout := flag.Bool("check-layout", false, "проверить раскладку (встроенную или из -layout) на диапазоне ширин и выйти, без запуска интерфейса")
+	tickerFont := flag.String("ticker-font", "", "ЭКСПЕРИМЕНТ: крупные тикеры в таблице шрифтом dtui-kit/banner (рекомендуется banner3-mini; доступные: см. ошибку при неверном значении); без флага — обычная таблица")
 	layoutPath := flag.String("layout", "", "путь к layout.yaml: зоны, описанные в нём, заменяют встроенные (header, footer); без пересборки")
 	flag.Var(&symbols, "symbol", "символ для отображения (можно указать несколько раз, должны совпадать с symbols в config.yaml сборщика)")
 	flag.Parse()
@@ -104,7 +106,10 @@ func run() error {
 		return err
 	}
 
-	model := ui.New(*host, *port, token, []string(symbols), *sysPort)
+	if *tickerFont != "" && !banner.IsKnownFont(banner.Font(*tickerFont)) {
+		return fmt.Errorf("неизвестный шрифт -ticker-font %q (доступные: %v)", *tickerFont, banner.Fonts())
+	}
+	model := ui.New(*host, *port, token, []string(symbols), *sysPort).WithTickerFont(banner.Font(*tickerFont))
 	program := tea.NewProgram(model)
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("ошибка выполнения TUI: %w", err)

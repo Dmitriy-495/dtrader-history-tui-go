@@ -41,7 +41,10 @@ var rightbarSectionTitleStyle = lipgloss.NewStyle().Foreground(theme.ColorData).
 // для основного статус-соединения, но это независимый, отдельный
 // источник данных — падение sysagent не должно влиять на content).
 func renderRightbar(cpuHist, memHist, diskHist sparkbar.History, sysErr error, width, height int) string {
-	innerWidth := width - 2 // рамка добавляет 2 символа, тот же паттерн, что в header/footer
+	// Width(width) включает рамку (2), а Padding(1,1) забирает ещё 2: на
+	// содержимое остаётся width-4. Раньше здесь было width-2, и график
+	// переносился на узкой панели (заметно стало при 65/35).
+	innerWidth := width - 4
 	if innerWidth < 1 {
 		innerWidth = 1
 	}

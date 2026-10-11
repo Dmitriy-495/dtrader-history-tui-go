@@ -1,7 +1,7 @@
 // Bubbletea-модель TUI dtrader-history. Layout: header (заголовок,
 // время биржи UTC, общий счётчик снапшотов) сверху, footer (статусная
-// строка) снизу, между ними content (таблица символов, 50% ширины) и
-// rightbar (состояние системы VPS — CPU/RAM/Disk с графиками, 50%
+// строка) снизу, между ними content (таблица символов, 65% ширины) и
+// rightbar (состояние системы VPS — CPU/RAM/Disk с графиками, 35%
 // ширины) — раскладка согласована с dtrader-tui-6 (см. header.go,
 // footer.go, rightbar.go). Палитра и sparkbar-графики — из общей
 // библиотеки github.com/Dmitriy-495/dtui-kit (theme, sparkbar), не
@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/Dmitriy-495/dtui-kit/banner"
 	"github.com/Dmitriy-495/dtui-kit/sparkbar"
 	"github.com/Dmitriy-495/dtui-kit/theme"
 
@@ -60,6 +61,10 @@ type Model struct {
 	symbols   []string
 
 	table table.Model
+
+	// Режим крупных тикеров (см. symbols.go): пустой шрифт — обычная таблица.
+	tickerFont banner.Font
+	cursor     int // выбранная строка в режиме крупных тикеров
 
 	connected    bool
 	lastStatus   *statusclient.Status
@@ -189,6 +194,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sysClient.Stop()
 			return m, tea.Quit
 		}
+		if m.tickerFont != "" {
+			m, _ = m.moveCursor(msg.String())
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.table, cmd = m.table.Update(msg)
 		return m, cmd
@@ -230,11 +239,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// contentWidth/rightbarWidth — 50/50 деление ширины терминала между
+// contentPercent — доля ширины терминала под content (таблицу символов); остальное — rightbar.
+const contentPercent = 65
+
+// contentWidth/rightbarWidth — 65/35 деление ширины терминала между
 // content (таблица) и rightbar (метрики системы), как решил автор
 // проекта — если понадобится другая пропорция, менять только здесь.
 func (m Model) contentWidth() int {
-	return m.width / 2
+	return m.width * contentPercent / 100
 }
 
 func (m Model) rightbarWidth() int {
@@ -269,7 +281,7 @@ func (m *Model) resizeTable() {
 // реальной ширине content-блока (см. contentWidth) — фиксированные
 // ширины колонок (изначально рассчитанные под таблицу на всю ширину
 // терминала) не помещались в новую половину экрана после перехода на
-// раскладку 50/50 content/rightbar: сумма фиксированных ширин
+// раскладку content/rightbar (было 50/50): сумма фиксированных ширин
 // превышала contentWidth(), из-за чего bubbles/table переносил
 // заголовок на две строки и ломал расчёт высоты в resizeTable (см.
 // комментарий про tableHeaderRows) — найдено визуальной проверкой
@@ -436,7 +448,11 @@ func (m Model) render() string {
 		BorderForeground(theme.ColorBorder).
 		Width(m.contentWidth()).
 		Height(m.bodyHeight())
-	content := contentStyle.Render(m.table.View())
+	tableView := m.table.View()
+	if m.tickerFont != "" {
+		tableView = m.renderSymbolsTall(m.contentWidth()-2, m.bodyHeight()-2)
+	}
+	content := contentStyle.Render(tableView)
 
 	rightbar := renderRightbar(m.cpuHist, m.memHist, m.diskHist, m.lastSysErr, m.rightbarWidth(), m.bodyHeight())
 

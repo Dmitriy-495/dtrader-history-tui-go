@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/Dmitriy-495/dtui-kit/sparkbar"
+
 	"github.com/Dmitriy-495/dtrader-history-tui/internal/statusclient"
 )
 
@@ -324,9 +326,9 @@ func TestWindowSizeMsg_ResizesTable(t *testing.T) {
 	}
 }
 
-// TestContentRightbarWidth_SplitsEvenly проверяет деление 50/50 между
+// TestContentRightbarWidth_Splits65To35 проверяет деление 65/35 между
 // content и rightbar — решение автора проекта, зафиксированное явно.
-func TestContentRightbarWidth_SplitsEvenly(t *testing.T) {
+func TestContentRightbarWidth_Splits65To35(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	mm := updated.(Model)
@@ -336,11 +338,31 @@ func TestContentRightbarWidth_SplitsEvenly(t *testing.T) {
 	if cw+rw != 120 {
 		t.Errorf("contentWidth()+rightbarWidth() = %d, want 120 (вся ширина должна быть использована)", cw+rw)
 	}
-	// Допускаем разницу в 1 символ из-за целочисленного деления
-	// нечётной ширины — не обязано быть математически идеальным 50/50.
-	diff := cw - rw
-	if diff < -1 || diff > 1 {
-		t.Errorf("contentWidth()=%d rightbarWidth()=%d — расхождение больше 1 символа, деление не похоже на 50/50", cw, rw)
+	// 120 * 65% = 78: content ровно 78, остаток 42 — rightbar.
+	if cw != 78 || rw != 42 {
+		t.Errorf("contentWidth()=%d rightbarWidth()=%d, want 78 и 42 (65/35)", cw, rw)
+	}
+}
+
+// График правой панели не переносится на узкой панели: каждая строка
+// ровно width, высота ровно height (рамка + Padding учтены).
+func TestRenderRightbar_ExactSizeOnNarrowPanel(t *testing.T) {
+	var cpu, mem, disk sparkbar.History = sparkbar.NewHistory(40), sparkbar.NewHistory(40), sparkbar.NewHistory(40)
+	for i := 0; i < 40; i++ {
+		cpu.Push(float64(i * 2))
+		mem.Push(30)
+		disk.Push(10)
+	}
+	for w := 30; w <= 90; w++ {
+		s := renderRightbar(cpu, mem, disk, nil, w, 20)
+		for i, line := range strings.Split(s, "\n") {
+			if got := lipgloss.Width(line); got != w {
+				t.Fatalf("w=%d: строка %d шириной %d", w, i, got)
+			}
+		}
+		if got := lipgloss.Height(s); got != 20 {
+			t.Fatalf("w=%d: высота %d, want 20", w, got)
+		}
 	}
 }
 

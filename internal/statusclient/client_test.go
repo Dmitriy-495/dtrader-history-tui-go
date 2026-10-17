@@ -360,3 +360,26 @@ func TestStop_NeverBlocksEvenWithoutAnyReader(t *testing.T) {
 		t.Fatal("Stop() не вернулся вовремя — возможно, дедлок")
 	}
 }
+
+// Цены в статусе необязательны: строка, число и null разбираются, старый
+// формат без цен тоже.
+func TestSymbolStatus_PriceFieldsOptional(t *testing.T) {
+	for name, c := range map[string]struct {
+		json     string
+		bid, ask Price
+	}{
+		"строки":     {`{"best_bid":"97250.1","best_ask":"97250.2"}`, "97250.1", "97250.2"},
+		"числа":      {`{"best_bid":97250.1,"best_ask":97250.2}`, "97250.1", "97250.2"},
+		"null":       {`{"best_bid":null,"best_ask":null}`, "", ""},
+		"без цен":    {`{"snapshots_since_start":5}`, "", ""},
+		"только бид": {`{"best_bid":"1.5"}`, "1.5", ""},
+	} {
+		var ss SymbolStatus
+		if err := json.Unmarshal([]byte(c.json), &ss); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if ss.BestBid != c.bid || ss.BestAsk != c.ask {
+			t.Errorf("%s: bid=%q ask=%q, want %q %q", name, ss.BestBid, ss.BestAsk, c.bid, c.ask)
+		}
+	}
+}

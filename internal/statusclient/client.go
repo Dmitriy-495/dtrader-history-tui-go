@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,11 +20,31 @@ import (
 // (reconnect_delay_seconds=3.0 по умолчанию в status_client.py).
 const DefaultReconnectDelay = 3 * time.Second
 
+// Price — цена из JSON: принимается и строкой ("97250.1", как в снапшоте
+// сборщика), и числом; хранится строкой, чтобы не терять знаки. null и
+// отсутствующее поле дают пустую строку.
+type Price string
+
+// UnmarshalJSON принимает строку, число или null.
+func (p *Price) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "null" {
+		*p = ""
+		return nil
+	}
+	*p = Price(strings.Trim(s, `"`))
+	return nil
+}
+
 // SymbolStatus — статистика по одному символу, поля совпадают с
 // протоколом статус-сервера (см. collector/statusserver/server.go).
+// BestBid/BestAsk — лучшие цены стакана из последнего снапшота; сборщик
+// может их не присылать (тогда пусто), клиент от этого не ломается.
 type SymbolStatus struct {
 	SnapshotsSinceStart int64   `json:"snapshots_since_start"`
 	LastSnapshotAgeSecs float64 `json:"last_snapshot_age_seconds"`
+	BestBid             Price   `json:"best_bid,omitempty"`
+	BestAsk             Price   `json:"best_ask,omitempty"`
 }
 
 // Status — сообщение, приходящее от статус-сервера при каждом push.

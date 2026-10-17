@@ -13,13 +13,14 @@ var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 func plain(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 // Главная защита порогов show-from / show-until в default_layout.yaml:
-// на любой ширине от 110 колонок шапка не должна ни переносить блоки на
+// на любой ширине от checkMinWidth колонок (со счётчиком снапшотов в 10
+// знаков, как в -check-layout) шапка не должна ни переносить блоки на
 // лишние строки, ни быть шире терминала. Пороги зависят от ширины
 // шрифтов, и при смене шрифта в YAML этот тест сразу покажет, где они
 // разошлись.
 func TestRenderHeader_NoWrapAndExactWidthAcrossWidths(t *testing.T) {
-	for w := 110; w <= 260; w++ {
-		h := renderHeader(1234567, w)
+	for w := checkMinWidth; w <= checkMaxWidth; w++ {
+		h := renderHeader(checkSnapshots, w)
 		if got := lipgloss.Width(h); got != w {
 			t.Fatalf("width=%d: ширина шапки %d, want %d", w, got, w)
 		}
@@ -131,5 +132,71 @@ func TestRenderFooter_StatusAndHint(t *testing.T) {
 		if !strings.Contains(plain(f), "подключено   q — выход") {
 			t.Errorf("width=%d: ожидались статус и подсказка через 3 пробела:\n%s", w, plain(f))
 		}
+	}
+}
+
+// Встроенная раскладка проходит собственную проверку (-check-layout).
+func TestCheckLayout_BuiltinIsClean(t *testing.T) {
+	var out strings.Builder
+	if !CheckLayout(&out, "встроенная") {
+		t.Fatalf("встроенная раскладка не прошла проверку:\n%s", out.String())
+	}
+	for _, want := range []string{"header: ок", "footer: ок", "Итог: раскладка помещается"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("в отчёте нет %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// Раскладка с шрифтом, который не помещается, даёт ошибку с диапазоном
+// ширин и величиной нехватки, а не молчит.
+func TestCheckLayout_ReportsOverflow(t *testing.T) {
+	saved := layout
+	defer func() { layout = saved }()
+
+	p := t.TempDir() + "/wide.yaml"
+	writeFile(t, p, "layout:\n  - zone: header\n    row:\n      - { type: banner, text: dtrader, font-size: lg }\n      - { type: banner, text: history, font-size: lg }\n")
+	if err := LoadLayout(p); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if CheckLayout(&out, p) {
+		t.Fatalf("ожидалась ошибка проверки:\n%s", out.String())
+	}
+	for _, want := range []string{"header: ОШИБКА", "ширины 114–", "не хватает до", "footer: ок", "Итог: есть ошибки"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("в отчёте нет %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// Блоки вплотную — предупреждение, а не ошибка: проверка проходит.
+func TestCheckLayout_TouchingIsOnlyWarning(t *testing.T) {
+	saved := layout
+	defer func() { layout = saved }()
+
+	// Баннер слева и текст справа ровно во всю ширину на самой узкой
+	// проверяемой ширине: переполнения нет, но и промежутка между блоками.
+	banner := "layout:\n  - zone: header\n    row:\n      - { type: banner, text: dtrader, font-size: lg }\n"
+	p := t.TempDir() + "/touch.yaml"
+	writeFile(t, p, banner)
+	if err := LoadLayout(p); err != nil {
+		t.Fatal(err)
+	}
+	need, avail, _ := headerZone().Fit(checkMinWidth, headerData(checkSnapshots))
+	label := avail - need - len("9999999999") // остальное займёт значение счётчика
+	if label < 1 {
+		t.Skip("баннер не оставляет места под второй блок")
+	}
+	writeFile(t, p, banner+"      - { type: text, label: \""+strings.Repeat("x", label)+"\", bind: snapshots_total, align: right }\n")
+	if err := LoadLayout(p); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if !CheckLayout(&out, p) {
+		t.Fatalf("предупреждение не должно быть ошибкой:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "header: ВНИМАНИЕ") || !strings.Contains(out.String(), "ширины 114\n") {
+		t.Fatalf("ожидалось предупреждение на ширине 114:\n%s", out.String())
 	}
 }

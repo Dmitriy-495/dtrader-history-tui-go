@@ -338,53 +338,57 @@ func proportionalWidths(total int, ratios []int) []int {
 	return widths
 }
 
-// buildRows — аналог цикла "for symbol in self.collector_symbols" в
-// исходной Python-версии: строит строки таблицы в ФИКСИРОВАННОМ
-// порядке символов из конфигурации, не в порядке, в котором они
-// встретились в последнем статус-сообщении (символ без данных всё
-// равно должен появиться в таблице как "нет данных").
+// symView — состояние одного символа для отрисовки. Единственный источник
+// для обычной таблицы (buildRows) и для режима крупных тикеров (symbols.go).
+type symView struct {
+	hasData   bool    // по символу приходил статус
+	snapshots int64   // снапшотов с запуска сборщика
+	age       float64 // секунды с последней записи; < 0 — неизвестно
+	stale     bool    // дольше staleThreshold без новых данных (или возраст неизвестен)
+	price     string  // середина лучшего бида и аска из снапшота; "" — сборщик цену не прислал
+}
+
+// symView собирает состояние символа. age пересчитывается локально от
+// момента получения push-сообщения (lastStatusAt), а не остаётся статичным
+// значением из самого сообщения — иначе цифра "застывала бы" между push'ами
+// раз в секунду, что выглядело бы как зависший интерфейс, а не просто редкие
+// обновления с сервера.
+func (m Model) symView(symbol string) symView {
+	if m.lastStatus == nil {
+		return symView{}
+	}
+	ss, ok := m.lastStatus.Symbols[symbol]
+	if !ok {
+		return symView{}
+	}
+	v := symView{hasData: true, snapshots: ss.SnapshotsSinceStart, price: midPrice(string(ss.BestBid), string(ss.BestAsk))}
+	if ss.LastSnapshotAgeSecs < 0 {
+		v.age, v.stale = -1, true
+		return v
+	}
+	v.age = ss.LastSnapshotAgeSecs + time.Since(m.lastStatusAt).Seconds()
+	v.stale = time.Duration(v.age*float64(time.Second)) > staleThreshold
+	return v
+}
+
+// buildRows строит строки обычной таблицы (режим без крупных тикеров).
 func (m Model) buildRows() []table.Row {
 	rows := make([]table.Row, 0, len(m.symbols))
 	for _, symbol := range m.symbols {
-		if m.lastStatus == nil {
+		v := m.symView(symbol)
+		if !v.hasData {
 			rows = append(rows, table.Row{symbol, "0", "—", theme.MutedStyle.Render("нет данных")})
 			continue
 		}
-		symStatus, ok := m.lastStatus.Symbols[symbol]
-		if !ok {
-			rows = append(rows, table.Row{symbol, "0", "—", theme.MutedStyle.Render("нет данных")})
-			continue
+		ageText := "—"
+		if v.age >= 0 {
+			ageText = fmt.Sprintf("%.1fс назад", v.age)
 		}
-
-		// age_seconds пересчитывается локально от момента получения
-		// push-сообщения (lastStatusAt), а не остаётся статичным
-		// значением из самого сообщения — иначе цифра "застывала бы"
-		// между push'ами раз в секунду, что выглядело бы как зависший
-		// интерфейс, а не просто редкие обновления с сервера.
-		baseAge := symStatus.LastSnapshotAgeSecs
-		var ageText string
-		var isStale bool
-		if baseAge < 0 {
-			ageText = "—"
-			isStale = true
-		} else {
-			elapsedSincePush := time.Since(m.lastStatusAt).Seconds()
-			age := baseAge + elapsedSincePush
-			ageText = fmt.Sprintf("%.1fс назад", age)
-			isStale = time.Duration(age*float64(time.Second)) > staleThreshold
-		}
-
 		statusText := theme.OKStyle.Render("работает")
-		if isStale {
+		if v.stale {
 			statusText = theme.SOSStyle.Render("ЗАСТРЯЛ?")
 		}
-
-		rows = append(rows, table.Row{
-			symbol,
-			fmt.Sprintf("%d", symStatus.SnapshotsSinceStart),
-			ageText,
-			statusText,
-		})
+		rows = append(rows, table.Row{symbol, fmt.Sprintf("%d", v.snapshots), ageText, statusText})
 	}
 	return rows
 }

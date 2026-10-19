@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/Dmitriy-495/dtui-kit/banner"
 	"github.com/Dmitriy-495/dtui-kit/sparkbar"
 
 	"github.com/Dmitriy-495/dtrader-history-tui/internal/statusclient"
@@ -326,9 +327,10 @@ func TestWindowSizeMsg_ResizesTable(t *testing.T) {
 	}
 }
 
-// TestContentRightbarWidth_Splits65To35 проверяет деление 65/35 между
-// content и rightbar — решение автора проекта, зафиксированное явно.
-func TestContentRightbarWidth_Splits65To35(t *testing.T) {
+// TestContentRightbarWidth_Splits50To50 проверяет деление 50/50 между
+// content и rightbar — решение автора проекта, зафиксированное явно
+// (65/35 пробовали и вернули 50/50).
+func TestContentRightbarWidth_Splits50To50(t *testing.T) {
 	m := newTestModel("localhost", 8765, "tok", []string{"BTC_USDT"})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	mm := updated.(Model)
@@ -338,9 +340,9 @@ func TestContentRightbarWidth_Splits65To35(t *testing.T) {
 	if cw+rw != 120 {
 		t.Errorf("contentWidth()+rightbarWidth() = %d, want 120 (вся ширина должна быть использована)", cw+rw)
 	}
-	// 120 * 65% = 78: content ровно 78, остаток 42 — rightbar.
-	if cw != 78 || rw != 42 {
-		t.Errorf("contentWidth()=%d rightbarWidth()=%d, want 78 и 42 (65/35)", cw, rw)
+	// 120 * 50% = 60: content ровно 60, остаток 60 — rightbar.
+	if cw != 60 || rw != 60 {
+		t.Errorf("contentWidth()=%d rightbarWidth()=%d, want 60 и 60 (50/50)", cw, rw)
 	}
 }
 
@@ -354,7 +356,7 @@ func TestRenderRightbar_ExactSizeOnNarrowPanel(t *testing.T) {
 		disk.Push(10)
 	}
 	for w := 30; w <= 90; w++ {
-		s := renderRightbar(cpu, mem, disk, nil, w, 20)
+		s := renderRightbar(cpu, mem, disk, nil, banner.FontBanner3Mini, w, 20)
 		for i, line := range strings.Split(s, "\n") {
 			if got := lipgloss.Width(line); got != w {
 				t.Fatalf("w=%d: строка %d шириной %d", w, i, got)

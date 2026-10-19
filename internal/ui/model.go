@@ -1,7 +1,7 @@
 // Bubbletea-модель TUI dtrader-history. Layout: header (заголовок,
 // время биржи UTC, общий счётчик снапшотов) сверху, footer (статусная
-// строка) снизу, между ними content (таблица символов, 65% ширины) и
-// rightbar (состояние системы VPS — CPU/RAM/Disk с графиками, 35%
+// строка) снизу, между ними content (таблица символов, 50% ширины) и
+// rightbar (состояние системы VPS — CPU/RAM/Disk с графиками, 50%
 // ширины) — раскладка согласована с dtrader-tui-6 (см. header.go,
 // footer.go, rightbar.go). Палитра и sparkbar-графики — из общей
 // библиотеки github.com/Dmitriy-495/dtui-kit (theme, sparkbar), не
@@ -240,9 +240,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // contentPercent — доля ширины терминала под content (таблицу символов); остальное — rightbar.
-const contentPercent = 65
+const contentPercent = 50
 
-// contentWidth/rightbarWidth — 65/35 деление ширины терминала между
+// contentWidth/rightbarWidth — деление ширины терминала между
 // content (таблица) и rightbar (метрики системы), как решил автор
 // проекта — если понадобится другая пропорция, менять только здесь.
 func (m Model) contentWidth() int {
@@ -345,7 +345,6 @@ type symView struct {
 	snapshots int64   // снапшотов с запуска сборщика
 	age       float64 // секунды с последней записи; < 0 — неизвестно
 	stale     bool    // дольше staleThreshold без новых данных (или возраст неизвестен)
-	price     string  // середина лучшего бида и аска из снапшота; "" — сборщик цену не прислал
 }
 
 // symView собирает состояние символа. age пересчитывается локально от
@@ -361,7 +360,7 @@ func (m Model) symView(symbol string) symView {
 	if !ok {
 		return symView{}
 	}
-	v := symView{hasData: true, snapshots: ss.SnapshotsSinceStart, price: midPrice(string(ss.BestBid), string(ss.BestAsk))}
+	v := symView{hasData: true, snapshots: ss.SnapshotsSinceStart}
 	if ss.LastSnapshotAgeSecs < 0 {
 		v.age, v.stale = -1, true
 		return v
@@ -458,7 +457,7 @@ func (m Model) render() string {
 	}
 	content := contentStyle.Render(tableView)
 
-	rightbar := renderRightbar(m.cpuHist, m.memHist, m.diskHist, m.lastSysErr, m.rightbarWidth(), m.bodyHeight())
+	rightbar := renderRightbar(m.cpuHist, m.memHist, m.diskHist, m.lastSysErr, m.tickerFont, m.rightbarWidth(), m.bodyHeight())
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, content, rightbar)
 

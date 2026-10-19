@@ -4,9 +4,6 @@
 // символа без заголовков столбцов состоит из трёх частей:
 //
 //   - тикер — котируемая монета (BTC из BTC_USDT) шрифтом из dtui-kit/banner;
-//   - цена — середина лучшего бида и аска из последнего снапшота сборщика
-//     (поля best_bid/best_ask статуса), тем же шрифтом; колонка появляется,
-//     только когда сборщик цены присылает, на узкой панели пропадает первой;
 //   - возраст последней записи тем же шрифтом (0.4s, 12s, 5m, 2h; нет данных —
 //     «--»);
 //   - кружок состояния: зелёный пульсирующий — данные идут; ярко-красный —
@@ -23,7 +20,6 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -46,10 +42,9 @@ const (
 	pulsePeriod = 2 * time.Second
 	pulseFloor  = 0.25
 
-	// Самые широкие значения возраста и цены — по ним считается ширина
-	// колонок, чтобы колонки не «ездили» при смене цифр.
-	ageWidest   = "88.8s"
-	priceWidest = "99999.99"
+	// Самое широкое значение возраста — по нему считается ширина колонки,
+	// чтобы колонки не «ездили» при смене цифр.
+	ageWidest = "88.8s"
 )
 
 // nowFn — источник времени для пульса; подменяется в тестах.
@@ -140,45 +135,6 @@ func formatAge(age float64) string {
 	}
 }
 
-// midPrice — середина лучшего бида и аска, записанная с тем же числом знаков
-// после точки, что у исходных цен (плюс один, если нужен для середины, без
-// лишних нулей в конце). Пустая строка — цены нет или она не разобрана.
-func midPrice(bid, ask string) string {
-	b, errB := strconv.ParseFloat(bid, 64)
-	a, errA := strconv.ParseFloat(ask, 64)
-	if errB != nil || errA != nil || b <= 0 || a <= 0 {
-		return ""
-	}
-	dec := max(decimals(bid), decimals(ask))
-	s := strconv.FormatFloat((a+b)/2, 'f', dec+1, 64)
-	if i := strings.IndexByte(s, '.'); i >= 0 {
-		for len(s)-i-1 > dec && s[len(s)-1] == '0' {
-			s = s[:len(s)-1]
-		}
-		s = strings.TrimSuffix(s, ".")
-	}
-	return s
-}
-
-// decimals — число знаков после точки в записи числа.
-func decimals(s string) int {
-	if i := strings.IndexByte(s, '.'); i >= 0 {
-		return len(s) - i - 1
-	}
-	return 0
-}
-
-// anyPrice — сборщик прислал цену хотя бы по одному символу (иначе колонку
-// цены не рисуем: она показывала бы одни прочерки).
-func (m Model) anyPrice() bool {
-	for _, sym := range m.symbols {
-		if m.symView(sym).price != "" {
-			return true
-		}
-	}
-	return false
-}
-
 // tickerOf — котируемая монета: всё до первого «_» (BTC_USDT → BTC).
 func tickerOf(symbol string) string {
 	if i := strings.IndexByte(symbol, '_'); i > 0 {
@@ -224,55 +180,35 @@ func cell(s string, w, h int) string {
 }
 
 // renderSymbolsTall строит содержимое левой панели ровно width × height.
-// Колонки: тикер · [цена] · возраст · кружок. Если ширины не хватает, сначала
-// пропадает цена, затем крупный вид заменяется текстовым (plainSymbolLines).
+// Колонки: тикер · возраст · кружок. Если ширины не хватает, крупный вид
+// заменяется текстовым (plainSymbolLines).
 func (m Model) renderSymbolsTall(width, height int) string {
 	now := nowFn()
 	render := func(text string) string {
 		return strings.TrimRight(banner.Render(text, banner.Options{Font: m.tickerFont}), "\n")
 	}
-	withPrice := m.anyPrice()
 
-	// Рисунки тикеров и цен; ширина колонок считается по самым широким значениям.
+	// Рисунки тикеров; ширина колонок считается по самым широким значениям.
 	figs := make([]string, len(m.symbols))
-	prices := make([]string, len(m.symbols))
 	figW, rowH := 0, dotH
-	priceW := lipgloss.Width(render(priceWidest))
 	for i, sym := range m.symbols {
 		figs[i] = render(tickerOf(sym))
 		figW = max(figW, lipgloss.Width(figs[i]))
 		rowH = max(rowH, lipgloss.Height(figs[i]))
-		if withPrice {
-			text := m.symView(sym).price
-			if text == "" {
-				text = "--"
-			}
-			prices[i] = render(text)
-			priceW = max(priceW, lipgloss.Width(prices[i]))
-		}
 	}
 	widest := render(ageWidest)
 	rowH = max(rowH, lipgloss.Height(widest))
 
-	tickCol, ageCol, dotCol, priceCol := figW+2, lipgloss.Width(widest)+2, dotW+2, priceW+2
-	cols := 3 // тикер, возраст, кружок
-	need := tickCol + ageCol + dotCol + (cols-1)*tallGapMin
-	showPrice := withPrice && width >= need+priceCol+tallGapMin
-	if showPrice {
-		cols, need = cols+1, need+priceCol+tallGapMin
-	}
+	tickCol, ageCol, dotCol := figW+2, lipgloss.Width(widest)+2, dotW+2
+	need := tickCol + ageCol + dotCol + 2*tallGapMin
 
 	var lines []string
 	if width < need {
-		lines = m.plainSymbolLines(now, withPrice)
+		lines = m.plainSymbolLines(now)
 	} else {
 		// Свободное место делится на зазоры между колонками (до tallGapMax).
-		gap := tallGapMin + min(tallGapMax-tallGapMin, (width-need)/(cols-1))
-		widths := []int{tickCol + gap}
-		if showPrice {
-			widths = append(widths, priceCol+gap)
-		}
-		widths = append(widths, ageCol+gap, dotCol)
+		gap := tallGapMin + min(tallGapMax-tallGapMin, (width-need)/2)
+		widths := []int{tickCol + gap, ageCol + gap, dotCol}
 
 		visible := max(1, (height-tallTopPad+tallRowGap)/(rowH+tallRowGap))
 		offset := 0
@@ -292,29 +228,22 @@ func (m Model) renderSymbolsTall(width, height int) string {
 			v := m.symView(m.symbols[i])
 			kind := symbolDot(v, m.lastErr != nil)
 
-			tickStyle, ageStyle, priceStyle := theme.DataStyle, lipgloss.NewStyle(), lipgloss.NewStyle().Bold(true)
+			tickStyle, ageStyle := theme.DataStyle, lipgloss.NewStyle()
 			if i == m.cursor {
-				tickStyle, ageStyle, priceStyle = tallSelectedStyle, tallSelectedStyle, tallSelectedStyle
+				tickStyle, ageStyle = tallSelectedStyle, tallSelectedStyle
 			}
 			switch kind {
 			case dotNone:
-				ageStyle, priceStyle = theme.MutedStyle, theme.MutedStyle
+				ageStyle = theme.MutedStyle
 			case dotLost:
-				// Цена застывшая — не доверяем ей, приглушаем; красным горит возраст.
-				ageStyle, priceStyle = theme.SOSStyle, theme.MutedStyle
+				ageStyle = theme.SOSStyle
 			}
 
-			cells := []string{cell(tickStyle.Render(figs[i]), widths[0], rowH)}
-			next := 1
-			if showPrice {
-				cells = append(cells, cell(priceStyle.Render(prices[i]), widths[next], rowH))
-				next++
-			}
-			cells = append(cells,
-				cell(ageStyle.Render(render(ageLabel(v))), widths[next], rowH),
-				cell(renderDot(kind, now), widths[next+1], rowH),
-			)
-			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top, cells...))
+			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top,
+				cell(tickStyle.Render(figs[i]), widths[0], rowH),
+				cell(ageStyle.Render(render(ageLabel(v))), widths[1], rowH),
+				cell(renderDot(kind, now), widths[2], rowH),
+			))
 		}
 	}
 
@@ -331,9 +260,9 @@ func ageLabel(v symView) string {
 }
 
 // plainSymbolLines — запасной вид для узкой панели: по строке на символ,
-// тикер, цена (если сборщик её присылает) и возраст обычным текстом, затем
-// кружок «●» (или «○», если данных нет) тем же цветом. Заголовков нет.
-func (m Model) plainSymbolLines(now time.Time, withPrice bool) []string {
+// тикер и возраст обычным текстом, затем кружок «●» (или «○», если данных
+// нет) тем же цветом. Заголовков нет.
+func (m Model) plainSymbolLines(now time.Time) []string {
 	lines := make([]string, 0, len(m.symbols)+tallTopPad)
 	for i := 0; i < tallTopPad; i++ {
 		lines = append(lines, "")
@@ -349,15 +278,7 @@ func (m Model) plainSymbolLines(now time.Time, withPrice bool) []string {
 		if i == m.cursor {
 			tick = tallSelectedStyle
 		}
-		price := ""
-		if withPrice {
-			text := v.price
-			if text == "" {
-				text = "--"
-			}
-			price = fmt.Sprintf("%-10s", text)
-		}
-		lines = append(lines, " "+tick.Render(fmt.Sprintf("%-6s", tickerOf(sym)))+price+
+		lines = append(lines, " "+tick.Render(fmt.Sprintf("%-6s", tickerOf(sym)))+
 			fmt.Sprintf("%-7s", ageLabel(v))+
 			lipgloss.NewStyle().Foreground(dotColor(kind, now)).Render(glyph))
 	}
